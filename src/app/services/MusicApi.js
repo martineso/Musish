@@ -90,17 +90,17 @@ export function infiniteLoadRelationships(
   functionGenerator,
   key,
   store,
-  dataModifier = d => d
+  dataModifier = d => d,
 ) {
   return async ({ offset }, { page }) => {
     if (page === 0) {
       const playlist = await functionGenerator(id, { offset });
-      const data = playlist.relationships[key];
+      const nextData = playlist.relationships[key];
 
       // eslint-disable-next-line no-param-reassign
-      store.nextUrl = data.next;
+      store.nextUrl = nextData.next;
 
-      return dataModifier(data.data);
+      return dataModifier(nextData.data);
     }
 
     if (!store.nextUrl) {
@@ -124,7 +124,7 @@ export async function fetchFullCatalogAlbumFromLibraryAlbum(album) {
   const mk = MusicKit.getInstance();
 
   const firstSong = album.relationships.tracks.data.find(
-    t => t.attributes && t.attributes.playParams && t.attributes.playParams.catalogId
+    t => t.attributes && t.attributes.playParams && t.attributes.playParams.catalogId,
   );
 
   if (!firstSong) {

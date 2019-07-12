@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React from 'react';
 
 import PropTypes from 'prop-types';
 import { withRouter } from 'react-router-dom';
@@ -6,76 +6,60 @@ import { DragSource } from 'react-dnd';
 import cx from 'classnames';
 import classes from './AlbumItem.scss';
 import AlbumPanel from '../AlbumPanel/AlbumPanel';
-import ModalContext from '../Modal/ModalContext';
 import DragDropType from '../../../utils/Constants/DragDropType';
 import ContextMenuTrigger from '../ContextMenu/ContextMenuTrigger';
 import AlbumContextMenu from '../ContextMenu/Types/Album/AlbumContextMenu';
+import { useModal } from '../../Providers/ModalProvider';
 
-class AlbumItem extends Component {
-  constructor(props) {
-    super(props);
+function AlbumItem(props) {
+  const { push: pushModal } = useModal();
 
-    this.handleOpen = this.handleOpen.bind(this);
-  }
+  function handleOpen(replace) {
+    const id = props.id || props.album.id;
 
-  handleOpen(replace) {
-    const id = this.props.id || this.props.album.id;
-
-    if (this.props.navigate) {
-      this.props.history.push(`/me/albums/${id}`);
+    if (props.navigate) {
+      props.history.push(`/me/album/${id}`);
     } else {
-      replace(<AlbumPanel key={id} id={id} />);
+      replace(<AlbumPanel key={id} id={id} pseudoRoute />);
     }
   }
 
-  render() {
-    const { album, size, connectDragSource, isOver } = this.props;
-    const artwork = MusicKit.formatArtworkURL(album.attributes.artwork, size, size);
+  const { album, size, connectDragSource, isOver } = props;
+  const artwork = MusicKit.formatArtworkURL(album.attributes.artwork, size, size);
 
-    const explicit = album.attributes.contentRating === 'explicit' && (
-      <div className={classes.explicit}>
-        <span>E</span>
+  const explicit = album.attributes.contentRating === 'explicit' && (
+    <div className={classes.explicit}>
+      <span>E</span>
+    </div>
+  );
+
+  return connectDragSource(
+    <div className={cx(classes.container, { [classes.droppable]: isOver })} style={{ width: size }}>
+      <div onClick={() => handleOpen(pushModal)}>
+        <ContextMenuTrigger holdToDisplay={-1} render={() => <AlbumContextMenu album={album} />}>
+          <div className={classes.imageContainer} style={{ width: size, height: size }}>
+            <img
+              src={artwork}
+              className={classes.image}
+              style={{ width: size, height: size }}
+              alt={album.attributes.name}
+              title={album.attributes.name}
+            />
+          </div>
+
+          <div className={classes.descriptionContainer}>
+            <span className={classes.albumTitle} style={{ width: size }}>
+              <div className={classes.albumName}>{album.attributes.name}</div>
+              {explicit}
+            </span>
+            <span className={classes.artistName} style={{ width: size }}>
+              {album.attributes.artistName}
+            </span>
+          </div>
+        </ContextMenuTrigger>
       </div>
-    );
-
-    return connectDragSource(
-      <div
-        className={cx(classes.container, { [classes.droppable]: isOver })}
-        style={{ width: size }}
-      >
-        <ModalContext.Consumer>
-          {({ push }) => (
-            <div onClick={() => this.handleOpen(push)}>
-              <ContextMenuTrigger
-                holdToDisplay={-1}
-                render={() => <AlbumContextMenu album={album} />}
-              >
-                <div className={classes.imageContainer} style={{ width: size, height: size }}>
-                  <img
-                    src={artwork}
-                    className={classes.image}
-                    style={{ width: size, height: size }}
-                    alt={album.attributes.name}
-                    title={album.attributes.name}
-                  />
-                </div>
-
-                <div className={classes.descriptionContainer}>
-                  <span className={classes.albumTitle} style={{ width: size }}>
-                    <div className={classes.albumName}>{album.attributes.name}</div>
-                    {explicit}
-                  </span>
-                  <span className={classes.artistName} style={{ width: size }}>
-                    {album.attributes.artistName}
-                  </span>
-                </div>
-              </ContextMenuTrigger>
-            </div>
-          )}
-        </ModalContext.Consumer>
-      </div>
-    );
-  }
+    </div>,
+  );
 }
 
 AlbumItem.propTypes = {

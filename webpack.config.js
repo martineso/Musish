@@ -1,5 +1,6 @@
-/* eslint-disable */
+/* tslint:disable */
 
+const webpack = require('webpack');
 const Dotenv = require('dotenv-webpack');
 const Encore = require('@symfony/webpack-encore');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
@@ -21,6 +22,7 @@ Encore.setOutputPath('build/')
       config.localIdentName = '[name]__[local]--[sha1:hash:hex:4]';
     }
   })
+  .enableTypeScriptLoader()
   .enableReactPreset()
   .enableSassLoader();
 
@@ -79,5 +81,11 @@ config.plugins.push(new FaviconsWebpackPlugin({
     windows: false
   }
 }));
+
+config.plugins.push(
+  new webpack.WatchIgnorePlugin([
+    /scss\.d\.ts$/
+  ]),
+);
 
 module.exports = config;

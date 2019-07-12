@@ -1,7 +1,9 @@
 import React from 'react';
 
 import PropTypes from 'prop-types';
+import cx from 'classnames';
 import { Link, Route, withRouter } from 'react-router-dom';
+import HTMLEllipsis from 'react-lines-ellipsis/lib/html';
 import classes from './AlbumPanel.scss';
 import { artworkForMediaItem, humanifyMillis, humanifyTrackNumbers } from '../../../utils/Utils';
 import TracksList from '../Tracks/TracksList/TracksList';
@@ -9,64 +11,57 @@ import Loader from '../Loader/Loader';
 import * as MusicPlayerApi from '../../../services/MusicPlayerApi';
 import * as MusicApi from '../../../services/MusicApi';
 import withMK from '../../../hoc/withMK';
-import ModalContext from '../Modal/ModalContext';
 import translate from '../../../utils/translations/Translations';
+import { withModal } from '../../Providers/ModalProvider';
+import withPseudoRoute from '../../../hoc/withPseudoRoute';
+import EAlbumPanel from './AlbumPanel';
 
 class AlbumPanel extends React.Component {
   constructor(props) {
     super(props);
 
+    this.albumId = this.props.id || this.props.album.id;
+    this.isCatalog = !isNaN(this.albumId);
+
     this.state = {
       album: null,
-      shouldMatchCatalogAlbum: !this.isCatalog(),
+      shouldMatchCatalogAlbum: !this.isCatalog,
       matchedCatalogAlbum: null,
+      showFullDescription: false,
     };
 
-    this.ref = React.createRef();
+    this.panelRef = React.createRef();
+    this.tracksListWsRef = React.createRef();
+    this.tracksListListRef = React.createRef();
     this.store = {};
-
-    this.playTrack = this.playTrack.bind(this);
-    this.playAlbum = this.playAlbum.bind(this);
-    this.shufflePlayAlbum = this.shufflePlayAlbum.bind(this);
-    this.onSetItems = this.onSetItems.bind(this);
-    this.albumLoader = this.albumLoader.bind(this);
-    this.fetchFullCatalogAlbum = this.fetchFullCatalogAlbum.bind(this);
   }
 
   componentDidMount() {
     this.fetchAlbum();
   }
 
-  async fetchAlbum() {
-    const album = await this.albumLoader(this.getAlbumId());
+  fetchAlbum = async () => {
+    const album = await this.albumLoader(this.albumId);
 
     this.setState({
       album,
     });
-  }
+  };
 
-  albumLoader(...args) {
+  albumLoader = (...args) => {
     const music = MusicKit.getInstance();
-    if (!this.isCatalog()) {
+    if (!this.isCatalog) {
       return music.api.library.album(...args);
     }
 
     return music.api.album(...args);
-  }
+  };
 
-  isCatalog() {
-    return !isNaN(this.getAlbumId());
-  }
-
-  getAlbumId() {
-    return this.props.id || this.props.album.id;
-  }
-
-  onSetItems({ items }) {
+  onSetItems = ({ items }) => {
     const albumLength = items.reduce(
       (totalDuration, track) =>
         totalDuration + (track.attributes ? track.attributes.durationInMillis : 0),
-      0
+      0,
     );
 
     if (this.state.shouldMatchCatalogAlbum) {
@@ -76,30 +71,39 @@ class AlbumPanel extends React.Component {
     this.setState({
       runtime: humanifyMillis(albumLength),
     });
-  }
+  };
 
-  playTrack({ index }) {
+  playTrack = ({ index }) => {
     MusicPlayerApi.playAlbum(this.state.album, index);
-  }
+  };
 
-  async playAlbum(index = 0) {
+  playAlbum = async (index = 0) => {
     MusicPlayerApi.playAlbum(this.state.album, index);
-  }
+  };
 
-  async shufflePlayAlbum() {
+  shufflePlayAlbum = async () => {
     MusicPlayerApi.shufflePlayAlbum(this.state.album);
-  }
+  };
 
-  async fetchFullCatalogAlbum() {
+  fetchFullCatalogAlbum = async () => {
     const { album } = this.state;
     const catalogAlbum = await MusicApi.fetchFullCatalogAlbumFromLibraryAlbum(album);
     this.setState({
       matchedCatalogAlbum: catalogAlbum,
     });
-  }
+  };
+
+  toggleFullDescription = () => {
+    const { showFullDescription } = this.state;
+
+    this.setState({
+      showFullDescription: !showFullDescription,
+    });
+  };
 
   render() {
-    const { album, matchedCatalogAlbum, runtime } = this.state;
+    const { modal } = this.props;
+    const { album, matchedCatalogAlbum, runtime, showFullDescription } = this.state;
 
     if (!album) {
       return <Loader />;
@@ -124,7 +128,7 @@ class AlbumPanel extends React.Component {
     );
 
     return (
-      <div className={classes.panel} ref={this.ref}>
+      <div className={cx(classes.panel, this.props.className)} ref={this.panelRef}>
         <div className={classes.aside}>
           <div className={classes.artworkWrapper}>
             <img src={artworkURL} alt={album.attributes.name} />
@@ -153,49 +157,65 @@ class AlbumPanel extends React.Component {
           <span className={classes.subtitle}>{artistName}</span>
 
           {album.attributes.editorialNotes && album.attributes.editorialNotes.standard && (
-            <div className={classes.description}>
-              <span
-                dangerouslySetInnerHTML={{ __html: album.attributes.editorialNotes.standard }} // eslint-disable-line react/no-danger
+            <div className={classes.description} onClick={this.toggleFullDescription}>
+              <HTMLEllipsis
+                unsafeHTML={album.attributes.editorialNotes.standard}
+                maxLine={showFullDescription ? Number.MAX_SAFE_INTEGER : 3}
+                ellipsisHTML='<i class="read-more">... read more</i>'
+                basedOn='words'
+                onReflow={() => {
+                  const tracksListWs = this.tracksListWsRef.current;
+                  if (tracksListWs) {
+                    tracksListWs.updatePosition();
+                  }
+
+                  const tracksListList = this.tracksListListRef.current;
+                  if (tracksListList) {
+                    tracksListList.forceUpdateGrid();
+                  }
+                }}
               />
             </div>
           )}
 
           <TracksList
-            scrollElement={this.ref}
+            scrollElement={this.panelRef}
             scrollElementModifier={e => e && e.parentElement}
             load={MusicApi.infiniteLoadRelationships(
-              this.getAlbumId(),
+              this.albumId,
               this.albumLoader,
               'tracks',
-              this.store
+              this.store,
             )}
             onSetItems={this.onSetItems}
             playTrack={this.playTrack}
+            wsRef={this.tracksListWsRef}
+            listRef={this.tracksListListRef}
           />
 
           {matchedCatalogAlbum && (
-            <ModalContext.Consumer>
-              {({ push }) => (
-                <div className={classes.showCompleteContainer}>
-                  <Route path={'/me/albums'}>
-                    {({ match }) => (
-                      <span
-                        onClick={() => {
-                          if (match) {
-                            this.props.history.push('/me/albums/');
-                          }
-                          push(
-                            <AlbumPanel key={matchedCatalogAlbum.id} album={matchedCatalogAlbum} />
-                          );
-                        }}
-                      >
-                        {translate.showCompleteAlbum}
-                      </span>
-                    )}
-                  </Route>
-                </div>
-              )}
-            </ModalContext.Consumer>
+            <div className={classes.showCompleteContainer}>
+              <Route path={'/me/albums'}>
+                {({ match }) => (
+                  <span
+                    onClick={() => {
+                      if (match) {
+                        this.props.history.push('/me/albums/');
+                      }
+                      modal.push(
+                        <EAlbumPanel
+                          key={matchedCatalogAlbum.id}
+                          album={matchedCatalogAlbum}
+                          pseudoRoute
+                        />,
+                      );
+                    }}
+                  >
+                    {translate.showCompleteAlbum}
+                  </span>
+                )}
+              </Route>
+            </div>
           )}
         </div>
       </div>
@@ -207,12 +227,25 @@ AlbumPanel.propTypes = {
   id: PropTypes.any,
   album: PropTypes.any,
   history: PropTypes.any,
+  modal: PropTypes.object,
+  className: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
 };
 
 AlbumPanel.defaultProps = {
   id: null,
   album: null,
   history: null,
+  modal: null,
+  className: null,
 };
 
-export default withRouter(withMK(AlbumPanel));
+const pseudoRoute = ({ id, album }) => {
+  const albumId = id || album.id;
+  let route = `/album/${albumId}`;
+  if (isNaN(albumId)) {
+    route = '/me' + route;
+  }
+  return route;
+};
+
+export default withPseudoRoute(withRouter(withModal(withMK(AlbumPanel))), pseudoRoute);

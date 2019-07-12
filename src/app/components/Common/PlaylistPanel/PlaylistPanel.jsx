@@ -1,15 +1,17 @@
 import React from 'react';
-
 import PropTypes from 'prop-types';
-import classes from './PlaylistPanel.scss';
+import cx from 'classnames';
+
 import { artworkForMediaItem, humanifyMillis, humanifyTrackNumbers } from '../../../utils/Utils';
 import TracksList from '../Tracks/TracksList/TracksList';
 import Loader from '../Loader/Loader';
 import * as MusicPlayerApi from '../../../services/MusicPlayerApi';
 import * as MusicApi from '../../../services/MusicApi';
 import translate from '../../../utils/translations/Translations';
+import withPseudoRoute from '../../../hoc/withPseudoRoute';
+import classes from './PlaylistPanel.scss';
 
-export default class PlaylistPanel extends React.Component {
+class PlaylistPanel extends React.Component {
   constructor(props) {
     super(props);
 
@@ -19,65 +21,57 @@ export default class PlaylistPanel extends React.Component {
       tracks: [],
     };
 
+    this.playlistId = this.props.id || this.props.playlist.id;
+
     this.ref = React.createRef();
     this.store = {};
-
-    this.playTrack = this.playTrack.bind(this);
-    this.playPlaylist = this.playPlaylist.bind(this);
-    this.shufflePlayPlaylist = this.shufflePlayPlaylist.bind(this);
-    this.onSetItems = this.onSetItems.bind(this);
-    this.playlistLoader = this.playlistLoader.bind(this);
   }
 
   componentDidMount() {
     this.fetchPlaylist();
   }
 
-  async fetchPlaylist() {
-    const playlist = await this.playlistLoader(this.getPlaylistId());
+  fetchPlaylist = async () => {
+    const playlist = await this.playlistLoader(this.playlistId);
 
     this.setState({
       playlist,
     });
-  }
+  };
 
-  playlistLoader(...args) {
+  playlistLoader = (...args) => {
     const music = MusicKit.getInstance();
-    if (this.getPlaylistId().startsWith('p.')) {
+    if (this.playlistId.startsWith('p.')) {
       return music.api.library.playlist(...args);
     }
 
     return music.api.playlist(...args);
-  }
+  };
 
-  getPlaylistId() {
-    return this.props.id || this.props.playlist.id;
-  }
-
-  onSetItems({ items: tracks }) {
+  onSetItems = ({ items: tracks }) => {
     const playlistLength = tracks.reduce(
       (totalDuration, track) =>
         totalDuration + (track.attributes ? track.attributes.durationInMillis : 0),
-      0
+      0,
     );
 
     this.setState({
       runtime: humanifyMillis(playlistLength),
       tracks,
     });
-  }
+  };
 
-  playTrack({ index }) {
+  playTrack = ({ index }) => {
     MusicPlayerApi.playPlaylist(this.state.playlist, index);
-  }
+  };
 
-  async playPlaylist(index = 0) {
+  playPlaylist = async (index = 0) => {
     MusicPlayerApi.playPlaylist(this.state.playlist, index);
-  }
+  };
 
-  async shufflePlayPlaylist() {
+  shufflePlayPlaylist = async () => {
     MusicPlayerApi.shufflePlayPlaylist(this.state.playlist);
-  }
+  };
 
   render() {
     const { playlist, runtime, tracks } = this.state;
@@ -90,7 +84,7 @@ export default class PlaylistPanel extends React.Component {
     const trackCount = playlist.attributes.trackCount || tracks.length;
 
     return (
-      <div className={classes.panel} ref={this.ref}>
+      <div className={cx(classes.panel, this.props.className)} ref={this.ref}>
         <div className={classes.header}>
           <div className={classes.headerMain}>
             <div className={classes.artworkWrapper}>
@@ -135,10 +129,10 @@ export default class PlaylistPanel extends React.Component {
             scrollElement={this.ref}
             scrollElementModifier={e => e && e.parentElement}
             load={MusicApi.infiniteLoadRelationships(
-              this.getPlaylistId(),
+              this.playlistId,
               this.playlistLoader,
               'tracks',
-              this.store
+              this.store,
             )}
             album={false}
             showArtist
@@ -155,9 +149,22 @@ export default class PlaylistPanel extends React.Component {
 PlaylistPanel.propTypes = {
   playlist: PropTypes.any,
   id: PropTypes.any,
+  className: PropTypes.oneOfType([PropTypes.string, PropTypes.object]),
 };
 
 PlaylistPanel.defaultProps = {
   playlist: null,
   id: null,
+  className: null,
 };
+
+const pseudoRoute = ({ id, playlist }) => {
+  const playlistId = id || playlist.id;
+  let route = `/playlist/${playlistId}`;
+  if (id.startsWith('p.')) {
+    route = '/me' + route;
+  }
+  return route;
+};
+
+export default withPseudoRoute(PlaylistPanel, pseudoRoute);
